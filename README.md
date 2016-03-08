@@ -12,12 +12,12 @@ Local software company [CEI](http://www.thinkcei.com) needs to have a better und
 
 ## The Data
 
-Invoice data from software sales spanning the years since before the change in licensing. Approximately 1000 invoices for 8 to 10 years.
+Approximately 1000-1500 invoices per year since Sept 2013 and any available client demographic data.
 
 ## The Analysis
 
 1.  Load and clean the data. Customer information may slightly different depending on who enters the invoice or the system used so I'll have to normalize this data before anonymizing it.
-2.  Anonymize the data - assign random identifiers to individual customers and any other personal information contained within the data.
+2.  Anonymize the data - assign random identifiers to individual customers and any other personal information contained within the data. (nb: may not be required, data provide will be anonymous.)
 3.  Identify potential other information sources that could be used to enhance the invoice data.
 4.  Examine the data using exploratory analysis techniques looking for relationships among different variables.
 5.  Tidy the data and using the results of step 4 apply appropriate rigorous methods to analyze the invoices.
@@ -34,4 +34,3 @@ An answer to the questions:
 
 Descriptive visualizations about the invoice and client data including a breakout of clients according to size.
 
-When exactly did the pricing change?
