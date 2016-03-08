@@ -26,7 +26,7 @@ Invoice data from software sales spanning the years since before the change in l
 ## The Deliverables
 
 An answer to the questions:
-* Has a subset of clients overbought? If so, how large is the risk and what characterizes clients in that category.
+* Has a subset of clients overbought? If so, how large is the risk and what characterizes clients in that set.
 * What other risks are discoverable?
 * Is a subset of clients underbought?
 * What other opportunities are discoverable?
