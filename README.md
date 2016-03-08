@@ -30,6 +30,7 @@ An answer to the questions:
 * What other risks are discoverable?
 * Is a subset of clients underbought?
 * What other opportunities are discoverable?
+* Relative performance of individual products.
 
 Descriptive visualizations about the invoice and client data including a breakout of clients according to size.
 
