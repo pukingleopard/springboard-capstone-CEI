@@ -6,7 +6,7 @@ The client changed their licensing model in 2009 / 2010 from a traditional buy t
 
 ## The Client
 
-Local software company CEI needs to have a better understanding of their primary revenue stream in order to:
+Local software company [CEI](http://www.thinkcei.com) needs to have a better understanding of their primary revenue stream in order to:
 * Predict and protect against revenue shortfall risks
 * Leverage and optimise revenue opportunities
 
