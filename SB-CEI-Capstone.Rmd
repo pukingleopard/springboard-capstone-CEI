@@ -1,0 +1,106 @@
+---
+title: "SB CEI Capstone"
+author: "James Hamilton"
+date: "March 24, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+```
+
+# Data Story Milestone
+
+### Problem Intro
+
+Analyze customer / order / invoice data for patterns and insights.
+
+### Deeper dive into the data
+
+#### Important fields
+The data was provided in the form of csv dumps of database tables - 6 files in all and a PNG with a graphical representation of the relationships between those tables. The tables and important fields are listed:
+* Accounts:  
+  + Account.Number - unique identifier
+  + Annual.Revenue, Employees, NAICS.Code, NAICS.Description, Ownership, SIC.Code, SIC.Description, Year.Started - demographics about the customer
+* Invoices:
+  + Invoice.Date, Invoice.Due.Date - Date invoiced and date invoice is due
+  + Invoice.Number - Unique identifier
+  + Payment.Method, Payment.Status, Payment.Terms, Record.Status - categoricals
+  + Subtotal.Amount, Total.Amount, Total.Tax.Amount - $$
+* Orders:
+  + Created.Date, Order.Date - Date of order
+  + Order.Name, Order.Number, Account.ID, Account.Number - identifiers
+  + Payment.Method, Payment.Status, Payment.Terms, Record.Status, Status - Categoricals
+  + Net.Amount, Product.Amount, Product.Discount.Amount, Product.Total.Amount, Subtotal.Amount, Total.Amount, Total.Discount.Amount, Discount.Percent - $$
+* Order Product Line:
+  + Id, Name - Identifiers
+  + DiscountSalesPrice, LineDiscountAmount, LineDiscountPercent, ListPrice, NetAmount, OrderDiscountAmount, OrderDiscountPercent, ProductAmount, Quantity, TotalAmount - $$
+  + Status, ProductFamily - Categorical
+* Invoice Line: duplicates Order Product Line info
+* Order Invoice Relationship:
+  + Record.ID, Invoice, Order - identifiers / keys between tables
+  + Invoice.Status, Order.Status - categoricals
+  + Relationship - ??
+
+#### Limitations
+* Data only back to 2013 which disallows analysis of the change of billing practice.
+
+#### Cleaning and wrangling
+* Removed "kugo2p__" and "__c" strings from field names in the source data to make joining tables easier.
+* Removed "Competitor", "Inspector", "Prospect" and "Reseller" account types from Account table
+* Removed extraneous columns from Account & Order & Order Product Line tables
+* Removed test items from order table
+* Cleaned up address fields in Account table
+
+#### Preliminary Exploration
+```{r load data}
+orders <- read.csv("SB-CEI-Capstone-Order.csv")
+accounts <- read.csv("SB-CEI-Capstone-Account.csv")
+orderlines <- read.csv("SB-CEI-Capstone-Order-Product-Line.csv")
+```
+
+Plotted Annual.Revenue vs. Employees faceted across Industry
+
+**540 Companies do not have Industry categorization and Employee count; of these 342 are in the US**
+**1229 Companies do not include Annual.Revenue; of these 1148 are in the US**
+```{r Revenue vs. Employees}
+ggplot(data = subset(accounts, Employees < 50000 & !is.na(Employees) & Annual.Revenue > 0), 
+  aes(x = Employees, y = Annual.Revenue)) + 
+  geom_point() + 
+  scale_x_log10() + scale_y_log10() + 
+  facet_wrap(~ Industry)
+```
+
+Looking at orders
+```{r Order data}
+orders$Order.Month <- substr(orders$Order.Date, 1, 2)
+orders$Order.Year <- substr(orders$Order.Date, 7, 10)
+orders$Order.YrMo <- paste(orders$Order.Year, orders$Order.Month)
+
+timeline <- orders %>%
+  group_by(Order.YrMo) %>%
+  summarise(
+    Order.count = n(),
+    Order.mid = median(Total.Amount),
+    Order.max = max(Total.Amount),
+    Order.sum = sum(Total.Amount)
+  )
+
+ggplot(data = orders, aes(x = Order.YrMo, y = Total.Amount, group=1)) +
+  geom_line(stat='summary', fun.y = sum) +
+  theme(axis.text.x = element_text(size=10, angle=35, hjust=1))
+```
+
+Order Line items
+```{r order lines}
+ggplot(data = orderlines, aes(x = ProductFamily, y = TotalAmount)) +
+  geom_bar(stat="summary", fun.y = sum)
+
+ggplot(data = orderlines, aes(x = Product, y = TotalAmount)) +
+  geom_bar(stat="summary", fun.y = sum) +
+  coord_flip()
+```
+
