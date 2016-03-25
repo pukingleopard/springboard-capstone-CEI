@@ -12,7 +12,7 @@ library(tidyr)
 library(ggplot2)
 ```
 
-# Data Story Milestone
+## Data Story Milestone
 
 ### Problem Intro
 
@@ -20,30 +20,37 @@ Analyze customer / order / invoice data for patterns and insights.
 
 ### Deeper dive into the data
 
-#### Important fields
-The data was provided in the form of csv dumps of database tables - 6 files in all and a PNG with a graphical representation of the relationships between those tables. The tables and important fields are listed:
-* Accounts:  
-  + Account.Number - unique identifier
-  + Annual.Revenue, Employees, NAICS.Code, NAICS.Description, Ownership, SIC.Code, SIC.Description, Year.Started - demographics about the customer
+#### Important fields   
+
+The data was provided in the form of csv dumps of database tables - 6 files in all and a PNG with a graphical representation of the relationships between those tables. The tables and important fields are listed:   
+
+* Accounts:
+    + Account.Number - unique identifier
+    + Annual.Revenue, Employees, NAICS.Code, NAICS.Description, Ownership, SIC.Code, SIC.Description, Year.Started - demographics about the customer
+
 * Invoices:
-  + Invoice.Date, Invoice.Due.Date - Date invoiced and date invoice is due
-  + Invoice.Number - Unique identifier
-  + Payment.Method, Payment.Status, Payment.Terms, Record.Status - categoricals
-  + Subtotal.Amount, Total.Amount, Total.Tax.Amount - $$
+    + Invoice.Date, Invoice.Due.Date - Date invoiced and date invoice is due   
+    + Invoice.Number - Unique identifier   
+    + Payment.Method, Payment.Status, Payment.Terms, Record.Status - categoricals   
+    + Subtotal.Amount, Total.Amount, Total.Tax.Amount - $$   
+
 * Orders:
-  + Created.Date, Order.Date - Date of order
-  + Order.Name, Order.Number, Account.ID, Account.Number - identifiers
-  + Payment.Method, Payment.Status, Payment.Terms, Record.Status, Status - Categoricals
-  + Net.Amount, Product.Amount, Product.Discount.Amount, Product.Total.Amount, Subtotal.Amount, Total.Amount, Total.Discount.Amount, Discount.Percent - $$
+    + Created.Date, Order.Date - Date of order
+    + Order.Name, Order.Number, Account.ID, Account.Number - identifiers
+    + Payment.Method, Payment.Status, Payment.Terms, Record.Status, Status - Categoricals
+    + Net.Amount, Product.Amount, Product.Discount.Amount, Product.Total.Amount, Subtotal.Amount, Total.Amount, Total.Discount.Amount, Discount.Percent - $$
+
 * Order Product Line:
-  + Id, Name - Identifiers
-  + DiscountSalesPrice, LineDiscountAmount, LineDiscountPercent, ListPrice, NetAmount, OrderDiscountAmount, OrderDiscountPercent, ProductAmount, Quantity, TotalAmount - $$
-  + Status, ProductFamily - Categorical
+    + Id, Name - Identifiers
+    + DiscountSalesPrice, LineDiscountAmount, LineDiscountPercent, ListPrice, NetAmount, OrderDiscountAmount, OrderDiscountPercent, ProductAmount, Quantity, TotalAmount - $$
+    + Status, ProductFamily - Categorical
+
 * Invoice Line: duplicates Order Product Line info
+
 * Order Invoice Relationship:
-  + Record.ID, Invoice, Order - identifiers / keys between tables
-  + Invoice.Status, Order.Status - categoricals
-  + Relationship - ??
+    + Record.ID, Invoice, Order - identifiers / keys between tables
+    + Invoice.Status, Order.Status - categoricals
+    + Relationship - ??
 
 #### Limitations
 * Data only back to 2013 which disallows analysis of the change of billing practice.
@@ -56,16 +63,19 @@ The data was provided in the form of csv dumps of database tables - 6 files in a
 * Cleaned up address fields in Account table
 
 #### Preliminary Exploration
-```{r load data}
+Load the cleaned data
+```{r load data, message = FALSE, echo = FALSE}
 orders <- read.csv("SB-CEI-Capstone-Order.csv")
 accounts <- read.csv("SB-CEI-Capstone-Account.csv")
 orderlines <- read.csv("SB-CEI-Capstone-Order-Product-Line.csv")
 ```
 
-Plotted Annual.Revenue vs. Employees faceted across Industry
+##### Plotted Annual.Revenue vs. Employees faceted across Industry
 
-**540 Companies do not have Industry categorization and Employee count; of these 342 are in the US**
-**1229 Companies do not include Annual.Revenue; of these 1148 are in the US**
+* *The following are excluded from the facet to make the graphs display more meaningful information*
+    - *540 Companies do not have Industry categorization and Employee count; of these 342 are in the US*   
+    - *1229 Companies do not include Annual.Revenue; of these 1148 are in the US.*
+    - *1 Company is huge with > 150000 Employees and $42.8B revenue so that is excluded to keep the graphs meaningful*
 ```{r Revenue vs. Employees}
 ggplot(data = subset(accounts, Employees < 50000 & !is.na(Employees) & Annual.Revenue > 0), 
   aes(x = Employees, y = Annual.Revenue)) + 
@@ -74,7 +84,7 @@ ggplot(data = subset(accounts, Employees < 50000 & !is.na(Employees) & Annual.Re
   facet_wrap(~ Industry)
 ```
 
-Looking at orders
+##### Looking at orders
 ```{r Order data}
 orders$Order.Month <- substr(orders$Order.Date, 1, 2)
 orders$Order.Year <- substr(orders$Order.Date, 7, 10)
@@ -94,7 +104,7 @@ ggplot(data = orders, aes(x = Order.YrMo, y = Total.Amount, group=1)) +
   theme(axis.text.x = element_text(size=10, angle=35, hjust=1))
 ```
 
-Order Line items
+##### Order Line items
 ```{r order lines}
 ggplot(data = orderlines, aes(x = ProductFamily, y = TotalAmount)) +
   geom_bar(stat="summary", fun.y = sum)
@@ -104,3 +114,8 @@ ggplot(data = orderlines, aes(x = Product, y = TotalAmount)) +
   coord_flip()
 ```
 
+#### The Approach
+
+It looks like there is an interesting relationship between size of the company and the industry - I'll proceed with aggregating the order total per company and plot that against those other variables. I'll also look at the relationship of the industry to the cyclic nature of the income graph.
+
+Additionally, there are clearly some products that yield much more in sales - I'll relate those to the industry and / or SIC / NAICS. Finally, I'll request the product names in order to provide a more meaningful visualization.
