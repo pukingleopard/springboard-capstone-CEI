@@ -1,5 +1,7 @@
 # springboard-capstone-CEI
 
+# See the "SB-CEI-Capstone.html" for the milestone report from the end of unit 6.
+
 ## The Problem
 
 The client changed their licensing model in 2009 / 2010 from a traditional buy the software once and pay for upgrades to a maintenance / yearly subscription style. Since then revenue has increased significantly however, they need to understand if the revenue increase is coming from their customers overbuying licenses for the software.
