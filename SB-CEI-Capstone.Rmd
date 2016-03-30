@@ -1,5 +1,5 @@
 ---
-title: "SB CEI Capstone"
+title: "Springboard Capstone Project - CEI"
 author: "James Hamilton"
 date: "March 24, 2016"
 output: html_document
@@ -10,112 +10,125 @@ knitr::opts_chunk$set(echo = TRUE)
 library(dplyr)
 library(tidyr)
 library(ggplot2)
+library(ggthemes)
+library(gridExtra)
 ```
 
-## Data Story Milestone
+# The Question
 
-### Problem Intro
-
-Analyze customer / order / invoice data for patterns and insights.
-
-### Deeper dive into the data
-
-#### Important fields   
-
-The data was provided in the form of csv dumps of database tables - 6 files in all and a PNG with a graphical representation of the relationships between those tables. The tables and important fields are listed:   
-
-* Accounts:
-    + Account.Number - unique identifier
-    + Annual.Revenue, Employees, NAICS.Code, NAICS.Description, Ownership, SIC.Code, SIC.Description, Year.Started - demographics about the customer
-
-* Invoices:
-    + Invoice.Date, Invoice.Due.Date - Date invoiced and date invoice is due   
-    + Invoice.Number - Unique identifier   
-    + Payment.Method, Payment.Status, Payment.Terms, Record.Status - categoricals   
-    + Subtotal.Amount, Total.Amount, Total.Tax.Amount - $$   
-
-* Orders:
-    + Created.Date, Order.Date - Date of order
-    + Order.Name, Order.Number, Account.ID, Account.Number - identifiers
-    + Payment.Method, Payment.Status, Payment.Terms, Record.Status, Status - Categoricals
-    + Net.Amount, Product.Amount, Product.Discount.Amount, Product.Total.Amount, Subtotal.Amount, Total.Amount, Total.Discount.Amount, Discount.Percent - $$
-
-* Order Product Line:
-    + Id, Name - Identifiers
-    + DiscountSalesPrice, LineDiscountAmount, LineDiscountPercent, ListPrice, NetAmount, OrderDiscountAmount, OrderDiscountPercent, ProductAmount, Quantity, TotalAmount - $$
-    + Status, ProductFamily - Categorical
-
-* Invoice Line: duplicates Order Product Line info
-
-* Order Invoice Relationship:
-    + Record.ID, Invoice, Order - identifiers / keys between tables
-    + Invoice.Status, Order.Status - categoricals
-    + Relationship - ??
-
-#### Limitations
-* Data only back to 2013 which disallows analysis of the change of billing practice.
-
-#### Cleaning and wrangling
-* Removed "kugo2p__" and "__c" strings from field names in the source data to make joining tables easier.
-* Removed "Competitor", "Inspector", "Prospect" and "Reseller" account types from Account table
-* Removed extraneous columns from Account & Order & Order Product Line tables
-* Removed test items from order table
-* Cleaned up address fields in Account table
-
-#### Preliminary Exploration
-Load the cleaned data
-```{r load data, message = FALSE, echo = FALSE}
-orders <- read.csv("SB-CEI-Capstone-Order.csv")
-accounts <- read.csv("SB-CEI-Capstone-Account.csv")
-orderlines <- read.csv("SB-CEI-Capstone-Order-Product-Line.csv")
+What useful insights can be drawn from the clients' customer and invoice data?
+    - Are some clients "over purchasing" because they don't understand the licensing scheme?
+    - What market segments are the largest / smallest and which market segments are growing / shrinking?
+    
+# The Data
+```{r load the data, echo=FALSE}
+accounts = read.csv("SB-CEI-Capstone-Account.csv", header = TRUE)
+orders = read.csv("SB-CEI-Capstone-Order.csv", header = TRUE)
+orderlines = read.csv("SB-CEI-Capstone-Order-Product-Line.csv", header=TRUE)
 ```
 
-##### Plotted Annual.Revenue vs. Employees faceted across Industry
+The data was provided by the client in the form of a text CSV export from their Salesforce database.
 
-* *The following are excluded from the facet to make the graphs display more meaningful information*
-    - *540 Companies do not have Industry categorization and Employee count; of these 342 are in the US*   
-    - *1229 Companies do not include Annual.Revenue; of these 1148 are in the US.*
-    - *1 Company is huge with > 150000 Employees and $42.8B revenue so that is excluded to keep the graphs meaningful*
-```{r Revenue vs. Employees}
-ggplot(data = subset(accounts, Employees < 50000 & !is.na(Employees) & Annual.Revenue > 0), 
-  aes(x = Employees, y = Annual.Revenue)) + 
-  geom_point() + 
-  scale_x_log10() + scale_y_log10() + 
-  facet_wrap(~ Industry)
+I focused primarily on the Account, Order, and Order Line tables. Some cleanup of the data was needed - a detailing of that activity is included at the end of this report.
+
+### Account
+
+data included the customer name and demographic data: location, employee counts, annual revenue and various industry classifiers.
+
+A correlation test indicates that the number of employees and Annual revenue are highly correlated (.93 at 99% confidence) across all customers indicating that using employee count alone as an indicator of the "size" of the customer would be accurate. Therefore, the following visuals are based on that conclusion and use the employee count as the primary indicator of client size.
+```{r Accounts, echo=FALSE}
+accounts.w <- accounts %>% filter(!is.na(accounts$Employees) & 
+    accounts$Employees > 0 & 
+    !is.na(accounts$Annual.Revenue) & 
+    accounts$Annual.Revenue > 0)
+
+p1 <- ggplot(data = accounts.w, aes(x = Industry)) + 
+  geom_bar() +
+  theme(axis.text.x = element_text(size=10, angle=35, hjust=1)) +
+  ylab("Count of customers")
+
+p2 <- ggplot(data = accounts.w, aes(Industry, Employees)) +
+  geom_boxplot() +
+  coord_cartesian(ylim=c(0,1000)) +
+  theme(axis.text.x = element_blank(), axis.title.x = element_blank()) +
+  ylab("Employees")
+
+grid.arrange(p2, p1)
 ```
 
-##### Looking at orders
-```{r Order data}
-orders$Order.Month <- substr(orders$Order.Date, 1, 2)
-orders$Order.Year <- substr(orders$Order.Date, 7, 10)
-orders$Order.YrMo <- paste(orders$Order.Year, orders$Order.Month)
+Primary conclusions here are that the Machinery, Manufacturing and Construction industries represent the majority of the client base and those companies are predominately < 250 employees in size. "Other" and "Retail" are also fairly large and will be studied as well.
 
-timeline <- orders %>%
-  group_by(Order.YrMo) %>%
-  summarise(
-    Order.count = n(),
-    Order.mid = median(Total.Amount),
-    Order.max = max(Total.Amount),
-    Order.sum = sum(Total.Amount)
-  )
-
-ggplot(data = orders, aes(x = Order.YrMo, y = Total.Amount, group=1)) +
-  geom_line(stat='summary', fun.y = sum) +
-  theme(axis.text.x = element_text(size=10, angle=35, hjust=1))
+```{r echo=FALSE}
+summary(accounts[ accounts$Industry == "Construction", ]$Employees)
+summary(accounts[ accounts$Industry == "Machinery", ]$Employees)
+summary(accounts[ accounts$Industry == "Manufacturing", ]$Employees)
+summary(accounts[ accounts$Industry == "Other", ]$Employees)
+summary(accounts[ accounts$Industry == "Retail", ]$Employees)
 ```
 
-##### Order Line items
-```{r order lines}
-ggplot(data = orderlines, aes(x = ProductFamily, y = TotalAmount)) +
-  geom_bar(stat="summary", fun.y = sum)
+Here we see that these industries are represented by companies that are generally in the range of 0 - 269 employees. Specifically, across all industries about 87% of all clients have less than 270 employees. This does not however, describe which industries or companies are the "most valuable" in terms of dollars spent.
 
-ggplot(data = orderlines, aes(x = Product, y = TotalAmount)) +
-  geom_bar(stat="summary", fun.y = sum) +
+### Orders
+
+data spanned two tables and included primarily dollar amounts, dates, quantities, payment methods and keys into other tables including the invoices and accounts tables. We are looking for two key pieces of information from this data:
+    - The ratio of customer size to the amount of purchase made by industry. (in dollars and quantity of software licenses or seats purchased) This will be used to identify outliers.
+    - The rate of change in amount of purchase made per industry
+```{r Orders, echo=FALSE}
+# Isolating columns needed from the three tables
+working.ol <- orderlines[ , c("SalesOrder","Product","ProductFamily","ProductAmount","Quantity") ]
+working.orders <- orders[ , c("Record.ID","Order.Date","Order.Type","Account.Number") ]
+working.orders <- rename(working.orders, SalesOrder = Record.ID)
+working.acct <- accounts[ , c("Account.Number",         "Billing.Country",
+                              "Billing.State.Province", "Employees",
+                              "Industry",               "Ownership")]
+work.o <- left_join(working.ol, working.orders, by = "SalesOrder")
+work <- left_join(work.o, working.acct, by = "Account.Number")
+
+byindustry <- group_by(work, Industry) %>%
+  summarise(median_e_count = median(Employees),
+    tot_e = sum(Employees),
+    median_quantity = median(Quantity),
+    mean_quantity = mean(Quantity),
+    max_quantity = max(Quantity),
+    tot_quantity = sum(Quantity),
+    median_dollars = median(ProductAmount),
+    mean_dollars = mean(ProductAmount),
+    max_dollars = max(ProductAmount),
+    tot_dollars = sum(ProductAmount)
+    )
+
+# I chose the mean for the quantity b/c the median for all industries is 1.
+byindustry$qtyratio <- byindustry$mean_quantity / byindustry$median_e_count
+byindustry$dollaratio <- byindustry$median_dollars / byindustry$median_e_count
+
+ggplot(data = byindustry, aes(x = Industry)) +
+  geom_point(aes(y = dollaratio, size = qtyratio, color = tot_dollars)) +
   coord_flip()
+
+byaccount <- filter(work, !is.na(Account.Number) & !is.na(Employees) & Employees > 0) %>%
+  group_by(., Industry, Account.Number, SalesOrder, Order.Date, Employees) %>%
+  summarise(., 
+    total_order_quantity = sum(Quantity),
+    total_order_dollars = sum(ProductAmount)
+  ) %>%
+  arrange(., Order.Date)
+byaccount$qty_per_emp <- byaccount$total_order_quantity / byaccount$Employees
+byaccount$dol_per_emp <- byaccount$total_order_dollars / byaccount$Employees
+
+ggplot(byaccount, aes(x = Order.Date)) +
+  geom_point(aes(y = qty_per_emp, color = dol_per_emp)) +
+  facet_wrap(~ Industry) + 
+  theme(axis.text.x = element_blank()) +
+  xlab("Date")
 ```
 
-#### The Approach
+It is important to note that about 1300 orders were removed from this analysis due to missing important column info - primarily Employee count.
 
-It looks like there is an interesting relationship between size of the company and the industry - I'll proceed with aggregating the order total per company and plot that against those other variables. I'll also look at the relationship of the industry to the cyclic nature of the income graph.
+Looking at these plots it appears that none of the Industries represented have a large group of purchases that are above the overall median of 1. This should be good news because that would suggest that the majority of clients have not overbought.
 
-Additionally, there are clearly some products that yield much more in sales - I'll relate those to the industry and / or SIC / NAICS. Finally, I'll request the product names in order to provide a more meaningful visualization.
+However, the display is fairly crowded and doesn't include the baseline value per industry so I'll focus on those industry groupings that appear to have the largest number of clients / orders and show a plot for each. Specifically: Chemicals, Construction, Consulting, Engineering, Machinery, Manufacturing, Other, Retail, Transportation, and Utilities.
+
+```{r Industry Specific, echo = FALSE}
+
+```
+
