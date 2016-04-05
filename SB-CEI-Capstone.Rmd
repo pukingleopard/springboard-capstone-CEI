@@ -12,6 +12,7 @@ library(tidyr)
 library(ggplot2)
 library(ggthemes)
 library(gridExtra)
+library(lubridate)
 ```
 
 # The Question
@@ -56,17 +57,19 @@ p2 <- ggplot(data = accounts.w, aes(Industry, Employees)) +
 grid.arrange(p2, p1)
 ```
 
-Primary conclusions here are that the Machinery, Manufacturing and Construction industries represent the majority of the client base and those companies are predominately < 250 employees in size. "Other" and "Retail" are also fairly large and will be studied as well.
+Primary conclusions here are that the Machinery, Manufacturing and Construction industries represent the majority of the client base and those companies are predominately < 250 employees in size. "Other", "Retail", "Chemicals", "Engineering", and "Consulting" are also fairly large and will be studied as well.
 
 ```{r echo=FALSE}
-summary(accounts[ accounts$Industry == "Construction", ]$Employees)
-summary(accounts[ accounts$Industry == "Machinery", ]$Employees)
-summary(accounts[ accounts$Industry == "Manufacturing", ]$Employees)
-summary(accounts[ accounts$Industry == "Other", ]$Employees)
-summary(accounts[ accounts$Industry == "Retail", ]$Employees)
+Industries <- c("Chemicals","Construction","Consulting","Engineering","Machinery","Manufacturing","Other","Retail")
+
+filter(accounts.w, Industry %in% Industries) %>%
+  group_by(Industry) %>%
+  select(Employees) %>%
+  summary(.)
 ```
 
-Here we see that these industries are represented by companies that are generally in the range of 0 - 269 employees. Specifically, across all industries about 87% of all clients have less than 270 employees. This does not however, describe which industries or companies are the "most valuable" in terms of dollars spent.
+Here we see that these industries are represented by companies that are generally in the range of 0 - 140 employees. Specifically, across all industries about 75% of all clients have <= 140 employees. This does not however, describe which industries or companies are the "most valuable" in terms of dollars spent.
+
 
 ### Orders
 
@@ -75,14 +78,16 @@ data spanned two tables and included primarily dollar amounts, dates, quantities
     - The rate of change in amount of purchase made per industry
 ```{r Orders, echo=FALSE}
 # Isolating columns needed from the three tables
+orders$date.of.order <- mdy(orders$Order.Date)
 working.ol <- orderlines[ , c("SalesOrder","Product","ProductFamily","ProductAmount","Quantity") ]
-working.orders <- orders[ , c("Record.ID","Order.Date","Order.Type","Account.Number") ]
+working.orders <- orders[ , c("Record.ID","date.of.order","Order.Type","Account.Number") ]
 working.orders <- rename(working.orders, SalesOrder = Record.ID)
 working.acct <- accounts[ , c("Account.Number",         "Billing.Country",
                               "Billing.State.Province", "Employees",
                               "Industry",               "Ownership")]
 work.o <- left_join(working.ol, working.orders, by = "SalesOrder")
 work <- left_join(work.o, working.acct, by = "Account.Number")
+work <- filter(work, Industry %in% Industries)
 
 byindustry <- group_by(work, Industry) %>%
   summarise(median_e_count = median(Employees),
@@ -106,19 +111,19 @@ ggplot(data = byindustry, aes(x = Industry)) +
   coord_flip()
 
 byaccount <- filter(work, !is.na(Account.Number) & !is.na(Employees) & Employees > 0) %>%
-  group_by(., Industry, Account.Number, SalesOrder, Order.Date, Employees) %>%
+  group_by(., Industry, Account.Number, SalesOrder, date.of.order, Employees) %>%
   summarise(., 
     total_order_quantity = sum(Quantity),
     total_order_dollars = sum(ProductAmount)
   ) %>%
-  arrange(., Order.Date)
+  arrange(., date.of.order)
 byaccount$qty_per_emp <- byaccount$total_order_quantity / byaccount$Employees
 byaccount$dol_per_emp <- byaccount$total_order_dollars / byaccount$Employees
+byaccount$year.of.order <- year(byaccount$date.of.order)
 
-ggplot(byaccount, aes(x = Order.Date)) +
+ggplot(byaccount, aes(x = date.of.order)) +
   geom_point(aes(y = qty_per_emp, color = dol_per_emp)) +
   facet_wrap(~ Industry) + 
-  theme(axis.text.x = element_blank()) +
   xlab("Date")
 ```
 
@@ -126,9 +131,81 @@ It is important to note that about 1300 orders were removed from this analysis d
 
 Looking at these plots it appears that none of the Industries represented have a large group of purchases that are above the overall median of 1. This should be good news because that would suggest that the majority of clients have not overbought.
 
-However, the display is fairly crowded and doesn't include the baseline value per industry so I'll focus on those industry groupings that appear to have the largest number of clients / orders and show a plot for each. Specifically: Chemicals, Construction, Consulting, Engineering, Machinery, Manufacturing, Other, Retail, Transportation, and Utilities.
+However, the display is fairly crowded and doesn't include the baseline value per industry so I'll focus on those industry groupings that appear to have the largest number of clients / orders and show a plot for each. Specifically: Chemicals, Construction, Consulting, Engineering, Machinery, Manufacturing, Other, and Retail.
 
-```{r Industry Specific, echo = FALSE}
+These plots show several interesting pieces of data. First, each point is an individual order and is plotted by order date and the quantity of the order normalized by employee count. The total size of the order governs the color of the point and the dollars spent per employee dictates the size of each point. Larger and "cooler" dots should be cause for concern if they fall above the overall median.
+
+The dashed horizontal line represents the ratio of the mean order quantity to the median employee count. The solid horizontal line represents the overall median order quantity across all clients.
+
+The expectation is that half of the points would fall below the dashed line and that most of the points would fall below the solid line - indicating that most purchases are within expectations if clients are purchasing only what they need.
+
+The data points above the line in all the critical industries are relatively small in number indicating a relatively low risk for those clients about which we have demographic data.
+
+It looks as though for most industries the majority of purchases would be characterized as "correct."
+
+```{r Industry Specific, echo = FALSE, message=FALSE}
+plot.Industry <- function(i) {
+  ratio <- filter(byindustry, Industry == i)$qtyratio
+  
+  ggplot(data = subset(byaccount, Industry == i),
+    aes(x = date.of.order)) +
+    geom_point(aes(y = qty_per_emp, size = dol_per_emp, color = total_order_dollars)) +
+    scale_color_gradientn(colors=rainbow(7)) +
+    geom_line(aes(y = ratio, group=1), linetype="dashed", color="black") +
+    geom_line(aes(y = 1, group=1), linetype="solid", color="black") +
+    theme(axis.text.x = element_text(size=10, angle=35, hjust=1)) +
+    xlab("Order Date") +
+    ylab("Order Qty per Employee") +
+    ggtitle(i)
+}
+
+lapply(Industries, plot.Industry)
+```
+
+### How can we quantify the risk?
+
+Specifically, how much of a problem could there be if the accounts that may be over purchased were to normalize their purchasing? How much of a risk is represented by the accounts that were excluded from the plots due to missing demographics?
+
+Calculating the sum of the orders that lie above the overall median Order quantity per employee for the most recent full year should give a decent idea of the overall risk.
+```{r risk}
 
 ```
+
+
+```{r 2015 Total, echo=FALSE}
+orders.2015 <- filter(byaccount, year.of.order == 2015)
+q3.2015 <- quantile(byaccount$total_order_dollars, probs = 0.75)
+
+dollars.2015 <- orders.2015 %>% ungroup() %>% select(total_order_dollars) %>% sum(.)
+q4.dollars.2015 <- filter(orders.2015, total_order_dollars > q3.2015) %>%
+  ungroup() %>%
+  select(total_order_dollars) %>%
+  sum(.)
+
+q4.projected.2015 <- filter(orders.2015, total_order_dollars > q3.2015) %>% count(.)
+q4.projected.2015 <- q4.projected.2015 * median(byaccount$total_order_dollars)
+
+industry.totals.2015 <- filter(byaccount, year.of.order == 2015) %>%
+  group_by(., Industry) %>%
+  summarise(., 
+    median.order = median(total_order_dollars),
+    q4 = quantile(total_order_dollars, probs = 0.75),
+    q4.count = sum(total_order_dollars > q4),
+    allorders = sum(total_order_dollars),
+    q4.total = sum(ifelse(total_order_dollars > q4, total_order_dollars, 0)),
+    q4.projected = sum(ifelse(total_order_dollars > q4, median.order, 0))
+  )
+
+industry.totals.2015$delta <- with(industry.totals.2015, q4.total - q4.projected)
+
+```
+
+The 4th Quartile for orders in 2015 starts at $
+`r q3.2015`   
+Total dollar value of orders in 2015: $`r as.character(dollars.2015)`   
+Total dollar value of orders in the 4th quartile: $`r as.character(q4.dollars.2015)`   
+
+Projected revenue decrease if orders in 4th quartile dropped to the median value: $`r as.character(q4.dollars.2015 - q4.projected.2015)`  
+
+Projected revenue decrease calculated by industry: $`r as.character(sum(industry.totals.2015$delta))`   
 
