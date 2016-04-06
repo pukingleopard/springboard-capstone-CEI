@@ -20,9 +20,13 @@ library(lubridate)
 What useful insights can be drawn from the clients' customer and invoice data?
     - Are some clients "over purchasing" because they don't understand the licensing scheme?
     - What market segments are the largest / smallest and which market segments are growing / shrinking?
-    
+
+To answer the first question the strategy will be to calculate a median purchase size that can be used to compare with specific orders and determine outliers. The sum of the orders of the outliers minus the "expected" buy represents the amount of over purchased dollars.
+
+The second question can be answered by the sum of the orders across an industry segment displayed graphically.
+
 # The Data
-```{r load the data, echo=FALSE}
+```{r load the data, echo=FALSE, message=FALSE, warning=FALSE}
 accounts = read.csv("SB-CEI-Capstone-Account.csv", header = TRUE)
 orders = read.csv("SB-CEI-Capstone-Order.csv", header = TRUE)
 orderlines = read.csv("SB-CEI-Capstone-Order-Product-Line.csv", header=TRUE)
@@ -34,9 +38,33 @@ I focused primarily on the Account, Order, and Order Line tables. Some cleanup o
 
 ### Account
 
-data included the customer name and demographic data: location, employee counts, annual revenue and various industry classifiers.
+The account data included the customer name and demographic data: location, employee counts, annual revenue and various industry classifiers. After data cleaning there were 2134 rows / observations in the "accounts" table.
 
-A correlation test indicates that the number of employees and Annual revenue are highly correlated (.93 at 99% confidence) across all customers indicating that using employee count alone as an indicator of the "size" of the customer would be accurate. Therefore, the following visuals are based on that conclusion and use the employee count as the primary indicator of client size.
+*Account.Number*  - simply a unique identifier was used to join the account data to the order data
+*Annual.Revenue*  - a dollar figure estimate of the customers annual revenue
+*Employees*       - estimated number of employees of the customer
+*Industry*        - broad categorization of the industry that the customer operates in
+
+A correlation test indicates that the number of employees and Annual revenue are highly correlated (.93 at 99% confidence) across all customers indicating that using employee count alone as an indicator of the "size" of the customer would be accurate.   
+
+### Order data
+
+These tables included details about individual orders including unique identifiers, order date, amounts and quantities, discounts applied, terms, status, product identifiers, list price, etc.
+
+*Net.Amount*      - Total dollar amount for the order
+*Order.Date*      - Date the order was placed
+*Payment.Method*  - Cash, check, credit, etc
+*ProductAmount*   - Dollar amount charged for each product in the order
+*Quantity*        - Number of licenses ordered for the product
+*SalesOrder*      - Unique identifier
+
+The account and order data was merged to produce a working data set that maps each line of the order to an account and industry.
+
+
+
+Therefore, the following visuals are based on that conclusion and use the employee count as the primary indicator of client size.   
+
+Finally, a working data set is generated containing only customers that have an Employee count > 0 - this yields a final account table with 1225 rows.
 ```{r Accounts, echo=FALSE}
 accounts.w <- accounts %>% filter(!is.na(accounts$Employees) & 
     accounts$Employees > 0 & 
@@ -87,9 +115,9 @@ working.acct <- accounts[ , c("Account.Number",         "Billing.Country",
                               "Industry",               "Ownership")]
 work.o <- left_join(working.ol, working.orders, by = "SalesOrder")
 work <- left_join(work.o, working.acct, by = "Account.Number")
-work <- filter(work, Industry %in% Industries)
 
-byindustry <- group_by(work, Industry) %>%
+byindustry <- filter(work, Industry %in% Industries) %>%
+  group_by(Industry) %>%
   summarise(median_e_count = median(Employees),
     tot_e = sum(Employees),
     median_quantity = median(Quantity),
@@ -110,7 +138,7 @@ ggplot(data = byindustry, aes(x = Industry)) +
   geom_point(aes(y = dollaratio, size = qtyratio, color = tot_dollars)) +
   coord_flip()
 
-byaccount <- filter(work, !is.na(Account.Number) & !is.na(Employees) & Employees > 0) %>%
+byaccount <- filter(work, !is.na(Account.Number) & !is.na(Employees) & Employees > 0 & Industry %in% Industries) %>%
   group_by(., Industry, Account.Number, SalesOrder, date.of.order, Employees) %>%
   summarise(., 
     total_order_quantity = sum(Quantity),
@@ -131,31 +159,34 @@ It is important to note that about 1300 orders were removed from this analysis d
 
 Looking at these plots it appears that none of the Industries represented have a large group of purchases that are above the overall median of 1. This should be good news because that would suggest that the majority of clients have not overbought.
 
-However, the display is fairly crowded and doesn't include the baseline value per industry so I'll focus on those industry groupings that appear to have the largest number of clients / orders and show a plot for each. Specifically: Chemicals, Construction, Consulting, Engineering, Machinery, Manufacturing, Other, and Retail.
+However, the display is fairly crowded and doesn't include the baseline value per industry so I'll show a plot for each. 
 
-These plots show several interesting pieces of data. First, each point is an individual order and is plotted by order date and the quantity of the order normalized by employee count. The total size of the order governs the color of the point and the dollars spent per employee dictates the size of each point. Larger and "cooler" dots should be cause for concern if they fall above the overall median.
+The next plots combine serveral bits of information. First, each point is an individual order and is plotted by order date along the x-axis and the quantity of the order normalized by employee count along the y-axis. The total size of the order in dollars governs the color of the point and the dollars spent per employee dictates the size of each point. Larger and "cooler" dots should be cause for concern if they fall above the overall median order quantity.
 
 The dashed horizontal line represents the ratio of the mean order quantity to the median employee count. The solid horizontal line represents the overall median order quantity across all clients.
 
-The expectation is that half of the points would fall below the dashed line and that most of the points would fall below the solid line - indicating that most purchases are within expectations if clients are purchasing only what they need.
+The expectation is that half of the points would fall below the dashed line and that *most* of the points would fall below the solid line - indicating that most purchases are within expectations if clients are purchasing only what they need.
 
 The data points above the line in all the critical industries are relatively small in number indicating a relatively low risk for those clients about which we have demographic data.
 
 It looks as though for most industries the majority of purchases would be characterized as "correct."
 
-```{r Industry Specific, echo = FALSE, message=FALSE}
+```{r Industry Specific, echo=FALSE, message=FALSE, warning=FALSE}
 plot.Industry <- function(i) {
   ratio <- filter(byindustry, Industry == i)$qtyratio
   
   ggplot(data = subset(byaccount, Industry == i),
     aes(x = date.of.order)) +
     geom_point(aes(y = qty_per_emp, size = dol_per_emp, color = total_order_dollars)) +
-    scale_color_gradientn(colors=rainbow(7)) +
+    labs(size = "$ per Employee", color = "Order Total\n     ($)") +
+    scale_color_gradientn(colors=rainbow(5)) +
     geom_line(aes(y = ratio, group=1), linetype="dashed", color="black") +
     geom_line(aes(y = 1, group=1), linetype="solid", color="black") +
     theme(axis.text.x = element_text(size=10, angle=35, hjust=1)) +
+    scale_x_datetime(date_breaks = "1 month", limits = c(ymd("20150101"),ymd("20151231"))) +
     xlab("Order Date") +
     ylab("Order Qty per Employee") +
+    guides(color = guide_colorbar(order = 1), size = guide_legend(order = 2)) +
     ggtitle(i)
 }
 
@@ -167,12 +198,40 @@ lapply(Industries, plot.Industry)
 Specifically, how much of a problem could there be if the accounts that may be over purchased were to normalize their purchasing? How much of a risk is represented by the accounts that were excluded from the plots due to missing demographics?
 
 Calculating the sum of the orders that lie above the overall median Order quantity per employee for the most recent full year should give a decent idea of the overall risk.
-```{r risk}
+```{r risk, message=FALSE, warning=FALSE, include=FALSE}
+
+# how much from the restricted accounts is at risk for potential drop
+dollars.at.risk <- filter(byaccount, qty_per_emp > 1, year.of.order == 2015) %>%
+  ungroup() %>%
+  select(total_order_dollars) %>%
+  sum(.)
+
+counted.orders <- filter(byaccount, year.of.order == 2015) %>%
+  ungroup() %>%
+  select(total_order_dollars) %>%
+  sum(.)
+
+# how much from the whole amount of orders is not counted in the restricted accounts
+uncounted.orders <- filter(work, (is.na(Employees) | Employees == 0) & 
+    year(date.of.order) == 2015) %>%
+  select(ProductAmount) %>%
+  sum(.)
+
+# total orders from 2015
+total.2015 <- filter(work, year(date.of.order) == 2015) %>%
+  select(ProductAmount) %>%
+  sum(.)
+
+total.dar.2015 <- (dollars.at.risk/counted.orders)*total.2015
 
 ```
 
+Assuming that the rate of "overbuy" will be the same in the whole population of accounts as it is in the accounts that we know demographics - we can approximate the risk in dollars from last year.
 
-```{r 2015 Total, echo=FALSE}
+The rate of overbuy in the subset with demographics: `r format(dollars.at.risk / counted.orders, digits = 3)`   
+Total dollars at risk from 2015: $`r format(total.dar.2015, digits=2, scientific = FALSE)`
+
+```{r 2015 Total, eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
 orders.2015 <- filter(byaccount, year.of.order == 2015)
 q3.2015 <- quantile(byaccount$total_order_dollars, probs = 0.75)
 
@@ -199,13 +258,4 @@ industry.totals.2015 <- filter(byaccount, year.of.order == 2015) %>%
 industry.totals.2015$delta <- with(industry.totals.2015, q4.total - q4.projected)
 
 ```
-
-The 4th Quartile for orders in 2015 starts at $
-`r q3.2015`   
-Total dollar value of orders in 2015: $`r as.character(dollars.2015)`   
-Total dollar value of orders in the 4th quartile: $`r as.character(q4.dollars.2015)`   
-
-Projected revenue decrease if orders in 4th quartile dropped to the median value: $`r as.character(q4.dollars.2015 - q4.projected.2015)`  
-
-Projected revenue decrease calculated by industry: $`r as.character(sum(industry.totals.2015$delta))`   
 
