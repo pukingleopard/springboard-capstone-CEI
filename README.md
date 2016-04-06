@@ -1,6 +1,12 @@
 # springboard-capstone-CEI
 
-# See the "SB-CEI-Capstone.html" for the milestone report from the end of unit 6.
+# Project submission
+
+The following files are included as part of the project submission requirements from Springboard:   
+* SB-CEI-Capstone.Rmd - the "code" that performs the processing and in this case generates the report.   
+* SB-CEI-Capstone.html - html version of the report   
+* SB-CEI-Capstone.docx - Word version of the report   
+* SB-capstone-CEI.pptx - Power point presentation with abbreviated data   
 
 ## The Problem
 
