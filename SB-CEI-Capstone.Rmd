@@ -2,7 +2,7 @@
 title: "Springboard Capstone Project - CEI"
 author: "James Hamilton"
 date: "March 24, 2016"
-output: html_document
+output: word_document
 ---
 
 ```{r setup, include=FALSE}
@@ -21,7 +21,7 @@ What useful insights can be drawn from the clients' customer and invoice data?
     - Are some clients "over purchasing" because they don't understand the licensing scheme?
     - What market segments are the largest / smallest and which market segments are growing / shrinking?
 
-To answer the first question the strategy will be to calculate a median purchase size that can be used to compare with specific orders and determine outliers. The sum of the orders of the outliers minus the "expected" buy represents the amount of over purchased dollars.
+To answer the first question the strategy will be to calculate a median purchase quantity using the quantity attribute in the order data. The median can then be used to compare with specific orders and determine outliers. The sum of the orders of the outliers minus the "expected" buy represents the amount of over purchased dollars.
 
 The second question can be answered by the sum of the orders across an industry segment displayed graphically.
 
@@ -34,37 +34,36 @@ orderlines = read.csv("SB-CEI-Capstone-Order-Product-Line.csv", header=TRUE)
 
 The data was provided by the client in the form of a text CSV export from their Salesforce database.
 
-I focused primarily on the Account, Order, and Order Line tables. Some cleanup of the data was needed - a detailing of that activity is included at the end of this report.
+I focused primarily on the Account, Order, and Order Line tables. Invoice data was provided but I found that it essentially duplicated the order data so I ignored it. Some cleanup of the data was needed - a detailing of that activity is included at the end of this report.
 
 ### Account
 
 The account data included the customer name and demographic data: location, employee counts, annual revenue and various industry classifiers. After data cleaning there were 2134 rows / observations in the "accounts" table.
 
-*Account.Number*  - simply a unique identifier was used to join the account data to the order data
-*Annual.Revenue*  - a dollar figure estimate of the customers annual revenue
-*Employees*       - estimated number of employees of the customer
-*Industry*        - broad categorization of the industry that the customer operates in
+*Account.Number*  - simply a unique identifier was used to join the account data to the order data   
+*Annual.Revenue*  - a dollar figure estimate of the customers annual revenue   
+*Employees*       - estimated number of employees of the customer   
+*Industry*        - broad categorization of the industry that the customer operates in   
 
 A correlation test indicates that the number of employees and Annual revenue are highly correlated (.93 at 99% confidence) across all customers indicating that using employee count alone as an indicator of the "size" of the customer would be accurate.   
 
 ### Order data
 
-These tables included details about individual orders including unique identifiers, order date, amounts and quantities, discounts applied, terms, status, product identifiers, list price, etc.
+These tables included details about individual orders including unique identifiers, order date, amounts and quantities, discounts applied, terms, status, product identifiers, list price, etc.   
 
-*Net.Amount*      - Total dollar amount for the order
-*Order.Date*      - Date the order was placed
-*Payment.Method*  - Cash, check, credit, etc
-*ProductAmount*   - Dollar amount charged for each product in the order
-*Quantity*        - Number of licenses ordered for the product
-*SalesOrder*      - Unique identifier
+*Net.Amount*      - Total dollar amount for the order   
+*Order.Date*      - Date the order was placed   
+*Payment.Method*  - Cash, check, credit, etc   
+*ProductAmount*   - Dollar amount charged for each product in the order   
+*Quantity*        - Number of licenses ordered for the product   
+*SalesOrder*      - Unique identifier   
 
-The account and order data was merged to produce a working data set that maps each line of the order to an account and industry.
-
-
+The account and order data was merged to produce a working data set that maps each line of the order to an account and industry.   
 
 Therefore, the following visuals are based on that conclusion and use the employee count as the primary indicator of client size.   
 
-Finally, a working data set is generated containing only customers that have an Employee count > 0 - this yields a final account table with 1225 rows.
+Finally, a working data set is generated containing only customers that have an Employee count > 0 - this yields a final account table with 1225 rows.   
+
 ```{r Accounts, echo=FALSE}
 accounts.w <- accounts %>% filter(!is.na(accounts$Employees) & 
     accounts$Employees > 0 & 
@@ -85,10 +84,18 @@ p2 <- ggplot(data = accounts.w, aes(Industry, Employees)) +
 grid.arrange(p2, p1)
 ```
 
-Primary conclusions here are that the Machinery, Manufacturing and Construction industries represent the majority of the client base and those companies are predominately < 250 employees in size. "Other", "Retail", "Chemicals", "Engineering", and "Consulting" are also fairly large and will be studied as well.
+Primary conclusions here are that the Machinery, Manufacturing and Construction industries represent the majority of the client base and those companies are predominately < 250 employees in size. However, several other industries are represented and more significantly what is missing here are the companies with no Industry designation at all.   
+
+Therefore, the remaining plots will focus on the following Industry categories:   
+Chemicals, Construction, Consulting, Education, Electronics, Energy, Engineering, Finance, Machinery, Manufacturing, Other, and Retail.   
 
 ```{r echo=FALSE}
-Industries <- c("Chemicals","Construction","Consulting","Engineering","Machinery","Manufacturing","Other","Retail")
+Industries <- c(
+  "Chemicals","Construction","Consulting",
+  "Education","Electronics","Energy","Engineering",
+  "Finance","Machinery","Manufacturing",
+  "Other","Retail"
+  )
 
 filter(accounts.w, Industry %in% Industries) %>%
   group_by(Industry) %>%
@@ -96,15 +103,33 @@ filter(accounts.w, Industry %in% Industries) %>%
   summary(.)
 ```
 
-Here we see that these industries are represented by companies that are generally in the range of 0 - 140 employees. Specifically, across all industries about 75% of all clients have <= 140 employees. This does not however, describe which industries or companies are the "most valuable" in terms of dollars spent.
-
+Here we see that these industries are represented by companies that are generally in the range of 0 - 145 employees. Specifically, across all industries 75% of all clients have <= 145 employees and 95% of all clients have <= 1000 employees. Essentially, the largest customers make up about 5% of the customer base.
 
 ### Orders
 
-data spanned two tables and included primarily dollar amounts, dates, quantities, payment methods and keys into other tables including the invoices and accounts tables. We are looking for two key pieces of information from this data:
-    - The ratio of customer size to the amount of purchase made by industry. (in dollars and quantity of software licenses or seats purchased) This will be used to identify outliers.
-    - The rate of change in amount of purchase made per industry
-```{r Orders, echo=FALSE}
+This data spanned two tables and included primarily dollar amounts, dates, quantities, payment methods and keys into other tables including the invoices and accounts tables.   
+
+A working data frame containing the fields necessary joined from the Accounts, Order and Order Product Line tables was created. Specifically, I needed these elements:   
+- SalesOrder (Order, Order Product Line)   
+- ProductAmount (Order Product Line)   
+- Quantity (Order Product Line)   
+- Order.Date (Order)   
+- Order.Type (Order)      
+- Account.Number (Order, Account)   
+- Employees (Account)   
+- Industry   
+
+The following plot describes the overall relationship per industry of the median order size (Quantity and $) to size of the customer (# of Employees).   
+
+Along the x-axis are the industries, along the y-axis is the mean quantity per median employee count. The mean quantity is used here because the median across all industries is 1 and the range of all values is from .25 - 17, so the magnitude of the outliers is far smaller and should make the mean an acceptible central tendancy value to use in this place. This is not true for the employee count.   
+
+The size of the point shows the dollars spent per employee and the color indicates the total dollars spent by that industry. Cooler colors translates to higher amounts.   
+
+Cause for concern would be a large and "cool" point that is high on the y-axis. One point is relatively high on the y-axis but it is "hot" owing to the fact that the Consulting industry is significantly less represented in the client base.
+
+The larger industries - Construction, Machinery, Manufacturing - are very low and "cool."
+
+```{r Industry stats, echo=FALSE, message=FALSE, warning=FALSE}
 # Isolating columns needed from the three tables
 orders$date.of.order <- mdy(orders$Order.Date)
 working.ol <- orderlines[ , c("SalesOrder","Product","ProductFamily","ProductAmount","Quantity") ]
@@ -116,6 +141,7 @@ working.acct <- accounts[ , c("Account.Number",         "Billing.Country",
 work.o <- left_join(working.ol, working.orders, by = "SalesOrder")
 work <- left_join(work.o, working.acct, by = "Account.Number")
 
+# generate stats for each industry in question
 byindustry <- filter(work, Industry %in% Industries) %>%
   group_by(Industry) %>%
   summarise(median_e_count = median(Employees),
@@ -134,10 +160,20 @@ byindustry <- filter(work, Industry %in% Industries) %>%
 byindustry$qtyratio <- byindustry$mean_quantity / byindustry$median_e_count
 byindustry$dollaratio <- byindustry$median_dollars / byindustry$median_e_count
 
+# plot the industry data
 ggplot(data = byindustry, aes(x = Industry)) +
-  geom_point(aes(y = dollaratio, size = qtyratio, color = tot_dollars)) +
-  coord_flip()
+  geom_point(aes(y = qtyratio, size = dollaratio, color = tot_dollars)) +
+  labs(size = "$ per Employee", color = "Total $") +
+  theme(axis.text.x = element_text(size=10, angle=35, hjust=1)) +
+  scale_color_gradientn(colors=rainbow(5)) +
+  ylab("Quantity per Employee") +
+  xlab("")
 
+```  
+
+The next plot displays all orders in 2015 in terms of the dollar and quantity per employee. A large number of floating points on these plots would be concerning but does not appear to be the case.
+
+```{r Orders by account, echo=FALSE}
 byaccount <- filter(work, !is.na(Account.Number) & !is.na(Employees) & Employees > 0 & Industry %in% Industries) %>%
   group_by(., Industry, Account.Number, SalesOrder, date.of.order, Employees) %>%
   summarise(., 
@@ -149,27 +185,30 @@ byaccount$qty_per_emp <- byaccount$total_order_quantity / byaccount$Employees
 byaccount$dol_per_emp <- byaccount$total_order_dollars / byaccount$Employees
 byaccount$year.of.order <- year(byaccount$date.of.order)
 
-ggplot(byaccount, aes(x = date.of.order)) +
+ggplot(data = subset(byaccount, year.of.order == 2015), 
+    aes(x = date.of.order)) +
   geom_point(aes(y = qty_per_emp, color = dol_per_emp)) +
+  labs(color = "$ / Employee") +
   facet_wrap(~ Industry) + 
-  xlab("Date")
+  ylab("Quantity per Employee") +
+  theme(axis.text.x = element_text(size=8, angle=30, hjust=1)) +
+  xlab("") +
+  ggtitle("2015 Orders")
 ```
-
-It is important to note that about 1300 orders were removed from this analysis due to missing important column info - primarily Employee count.
 
 Looking at these plots it appears that none of the Industries represented have a large group of purchases that are above the overall median of 1. This should be good news because that would suggest that the majority of clients have not overbought.
 
-However, the display is fairly crowded and doesn't include the baseline value per industry so I'll show a plot for each. 
+However, the display is fairly crowded and doesn't include the baseline value per industry so I'll show a plot for each industry separately.   
 
-The next plots combine serveral bits of information. First, each point is an individual order and is plotted by order date along the x-axis and the quantity of the order normalized by employee count along the y-axis. The total size of the order in dollars governs the color of the point and the dollars spent per employee dictates the size of each point. Larger and "cooler" dots should be cause for concern if they fall above the overall median order quantity.
+ 
+
+The next plots combine serveral bits of information. First, each point is an individual order and is plotted by order date along the x-axis and the quantity of the order normalized by employee count along the y-axis. The total size of the order in dollars governs the color of the point. Larger and "cooler" dots should be cause for concern if they fall above the overall median order quantity.
 
 The dashed horizontal line represents the ratio of the mean order quantity to the median employee count. The solid horizontal line represents the overall median order quantity across all clients.
 
 The expectation is that half of the points would fall below the dashed line and that *most* of the points would fall below the solid line - indicating that most purchases are within expectations if clients are purchasing only what they need.
 
-The data points above the line in all the critical industries are relatively small in number indicating a relatively low risk for those clients about which we have demographic data.
-
-It looks as though for most industries the majority of purchases would be characterized as "correct."
+The data points above the line in all the critical industries are relatively small in number indicating a relatively low risk for those clients about which we have demographic data.   
 
 ```{r Industry Specific, echo=FALSE, message=FALSE, warning=FALSE}
 plot.Industry <- function(i) {
@@ -177,8 +216,8 @@ plot.Industry <- function(i) {
   
   ggplot(data = subset(byaccount, Industry == i),
     aes(x = date.of.order)) +
-    geom_point(aes(y = qty_per_emp, size = dol_per_emp, color = total_order_dollars)) +
-    labs(size = "$ per Employee", color = "Order Total\n     ($)") +
+    geom_point(aes(y = qty_per_emp, color = total_order_dollars), size=3) +
+    labs(color = "Order Total\n     ($)") +
     scale_color_gradientn(colors=rainbow(5)) +
     geom_line(aes(y = ratio, group=1), linetype="dashed", color="black") +
     geom_line(aes(y = 1, group=1), linetype="solid", color="black") +
@@ -186,12 +225,29 @@ plot.Industry <- function(i) {
     scale_x_datetime(date_breaks = "1 month", limits = c(ymd("20150101"),ymd("20151231"))) +
     xlab("Order Date") +
     ylab("Order Qty per Employee") +
-    guides(color = guide_colorbar(order = 1), size = guide_legend(order = 2)) +
     ggtitle(i)
 }
+ 
+#switch out from lapply to get rid of nasty output for each plot
+#lapply(Industries, plot.Industry)
+plot.Industry("Chemicals")
+plot.Industry("Construction")
+plot.Industry("Consulting")
+plot.Industry("Education")
+plot.Industry("Electronics")
+plot.Industry("Energy")
+plot.Industry("Engineering")
+plot.Industry("Finance")
+plot.Industry("Machinery")
+plot.Industry("Manufacturing")
+plot.Industry("Other")
+plot.Industry("Retail")
+```   
 
-lapply(Industries, plot.Industry)
-```
+It looks as though for most industries the majority of purchases would be characterized as "correct."     
+Consulting is unique probably due to the fact that consultants probably have a higher ratio of employees that use the software compared to other industries.
+
+
 
 ### How can we quantify the risk?
 
@@ -226,36 +282,47 @@ total.dar.2015 <- (dollars.at.risk/counted.orders)*total.2015
 
 ```
 
-Assuming that the rate of "overbuy" will be the same in the whole population of accounts as it is in the accounts that we know demographics - we can approximate the risk in dollars from last year.
+Assuming that the rate of "overbuy" will be the same in the whole population of accounts as it is in the accounts for which we know demographics - we can approximate the risk in dollars from last year.
 
-The rate of overbuy in the subset with demographics: `r format(dollars.at.risk / counted.orders, digits = 3)`   
-Total dollars at risk from 2015: $`r format(total.dar.2015, digits=2, scientific = FALSE)`
-
-```{r 2015 Total, eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
-orders.2015 <- filter(byaccount, year.of.order == 2015)
-q3.2015 <- quantile(byaccount$total_order_dollars, probs = 0.75)
-
-dollars.2015 <- orders.2015 %>% ungroup() %>% select(total_order_dollars) %>% sum(.)
-q4.dollars.2015 <- filter(orders.2015, total_order_dollars > q3.2015) %>%
-  ungroup() %>%
-  select(total_order_dollars) %>%
-  sum(.)
-
-q4.projected.2015 <- filter(orders.2015, total_order_dollars > q3.2015) %>% count(.)
-q4.projected.2015 <- q4.projected.2015 * median(byaccount$total_order_dollars)
-
-industry.totals.2015 <- filter(byaccount, year.of.order == 2015) %>%
-  group_by(., Industry) %>%
-  summarise(., 
-    median.order = median(total_order_dollars),
-    q4 = quantile(total_order_dollars, probs = 0.75),
-    q4.count = sum(total_order_dollars > q4),
-    allorders = sum(total_order_dollars),
-    q4.total = sum(ifelse(total_order_dollars > q4, total_order_dollars, 0)),
-    q4.projected = sum(ifelse(total_order_dollars > q4, median.order, 0))
-  )
-
-industry.totals.2015$delta <- with(industry.totals.2015, q4.total - q4.projected)
-
+The overbuy rate will be calculated from the sample set with employee data as:   
+```
+          overbuy_rate = Total order amounts above the overall median / Total orders
+```
+The total amount of dollars at risk across all orders for 2015 will be calculated as the product of the overbuy_rate and the total orders for 2015.      
+```
+          dollars_at_risk = overbuy_rate * Total 2015 Orders
 ```
 
+### The rate of overbuy in the subset with demographics: `r format(dollars.at.risk / counted.orders, digits = 3)`   
+### Total dollars at risk from 2015: $`r format(total.dar.2015, digits=2, scientific = FALSE)`
+
+# Relative sizes of the industries in dollars
+
+```{r Industry sizes, echo=FALSE}
+Industry.size <- filter(work, year(date.of.order) == 2015) %>%
+  ungroup() %>%
+  select(Industry, ProductAmount) %>%
+  group_by(Industry) %>%
+  summarise(
+    Total.Orders = sum(ProductAmount)
+  ) %>%
+  arrange(Total.Orders)
+
+ggplot(data = Industry.size, aes(x = reorder(Industry, -Total.Orders), y = Total.Orders)) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(size=10, angle=35, hjust=1)) +
+  xlab("Industry")
+```
+
+Note here that the empty Industry category is very large but not larger than the sum of the rest of the Industries.   
+
+
+#### Data clean up
+
+* Removed "kugo2p" and "c" strings from field names in the source data to make joins easier.
+* Removed "Competitor", "Inspector", "Prospect" and "Reseller" account types from Account table
+* Removed extraneous columns from Account & Order & Order Product Line tables
+* Removed test items from order table
+* Cleaned up address fields in Account table
+
+Much of the clean up was performed using OpenRefine - those operations are available for inspection / replication as a json.
